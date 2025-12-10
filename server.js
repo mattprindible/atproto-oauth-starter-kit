@@ -2,6 +2,8 @@ require('dotenv').config();
 const { JoseKey } = require('@atproto/jwk-jose');
 const { doubleCsrf } = require('csrf-csrf');
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { NodeOAuthClient } = require('@atproto/oauth-client-node');
 const { Agent } = require('@atproto/api');
@@ -12,6 +14,23 @@ const db = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || `http://127.0.0.1:${PORT}`;
+
+// Rate Limiters
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many login attempts, please try again later.'
+});
+
+const postLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    limit: 60, // Limit each IP to 60 posts per hour
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'You are posting too fast.'
+});
 
 // Load Keys
 const keysPath = path.join(__dirname, 'keys.json');
@@ -31,7 +50,7 @@ const {
     cookieName: "x-csrf-token", // The name of the cookie to be used, recommend using x-csrf-token
     cookieOptions: {
         httpOnly: true,
-        sameSite: "lax",  // Recommend you make this strict if possible
+        sameSite: "strict",  // Stricter protection
         path: "/",
         secure: true,
     },
@@ -74,6 +93,9 @@ async function main() {
         sessionStore: db.sessionStore,
     });
 
+    app.use(helmet({
+        contentSecurityPolicy: false, // Disabled for simplicity with inline scripts
+    }));
     app.use(express.json());
     app.use(express.static('public'));
     app.use(cookieParser(process.env.COOKIE_SECRET));
@@ -98,9 +120,17 @@ async function main() {
     });
 
     // 2. Login - Init
-    app.get('/login', async (req, res) => {
+    app.get('/login', loginLimiter, async (req, res) => {
         const handle = req.query.handle;
-        if (!handle) return res.status(400).send('Handle required');
+
+        // Input Validation
+        if (!handle || typeof handle !== 'string' || handle.trim().length === 0) {
+            return res.status(400).send('Handle required');
+        }
+        // Basic handle format check (alphanumeric + dots/hyphens)
+        if (!/^[a-zA-Z0-9.-]+$/.test(handle)) {
+            return res.status(400).send('Invalid handle format');
+        }
 
         try {
             // Revoke any existing session? Maybe not needed for minimal.
@@ -131,7 +161,9 @@ async function main() {
             res.cookie('user_did', session.did, {
                 httpOnly: true,
                 signed: true,
-                maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+                sameSite: 'lax', // Must be lax for top-level navigation (redirect from PDS)
+                secure: true
             });
 
             res.redirect('/');
@@ -162,17 +194,25 @@ async function main() {
             });
         } catch (err) {
             console.error('API Me error:', err);
-            res.status(500).json({ error: err.message });
+            // Don't expose internal errors
+            res.status(500).json({ error: 'Failed to fetch profile' });
         }
     });
 
     // 5. API - Post
-    app.post('/api/post', async (req, res) => {
+    app.post('/api/post', postLimiter, async (req, res) => {
         const did = req.signedCookies.user_did;
         if (!did) return res.status(401).json({ error: 'Not logged in' });
 
         const { text } = req.body;
-        if (!text) return res.status(400).json({ error: 'Text required' });
+
+        // Input Validation
+        if (!text || typeof text !== 'string') {
+            return res.status(400).json({ error: 'Text required' });
+        }
+        if (text.length > 300) {
+            return res.status(400).json({ error: 'Text too long (max 300 chars)' });
+        }
 
         try {
             const agent = await getAgent(did, oauthClient);
@@ -183,7 +223,7 @@ async function main() {
             res.json({ success: true });
         } catch (err) {
             console.error('Post error:', err);
-            res.status(500).json({ error: err.message });
+            res.status(500).json({ error: 'Failed to post' });
         }
     });
 
@@ -199,6 +239,12 @@ async function main() {
         }
         res.clearCookie('user_did');
         res.json({ success: true });
+    });
+
+    // Error Handler
+    app.use((err, req, res, next) => {
+        console.error('Unhandled Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     });
 
     app.listen(PORT, () => {
