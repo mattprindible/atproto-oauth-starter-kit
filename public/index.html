@@ -145,7 +145,23 @@
       }
     }
 
-    // ...
+    function showApp(user) {
+      document.getElementById('displayName').textContent = user.displayName || user.handle;
+      document.getElementById('userHandle').textContent = user.handle;
+      if (user.avatar) document.getElementById('avatar').src = user.avatar;
+
+      loginSection.classList.add('hidden');
+      appSection.classList.remove('hidden');
+    }
+
+    // Login Flow
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const handle = document.getElementById('handle').value.trim();
+      // Redirect to backend login (GET request, no CSRF needed for initiation usually, or strict flows might need it)
+      // Since it's a GET to /login which redirects to OAuth provider, CSRF token isn't strictly needed in headers
+      window.location.href = `/login?handle=${encodeURIComponent(handle)}`;
+    });
 
     // Post Flow
     document.getElementById('postBtn').addEventListener('click', async () => {
