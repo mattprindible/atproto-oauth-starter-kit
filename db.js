@@ -41,45 +41,72 @@ const createStore = (redisClient, sqliteDb, tableName) => {
 
 let stateStore;
 let sessionStore;
+let redisClient;
+let isInitialized = false;
 
-if (process.env.REDIS_URL) {
-    console.log('⚡️ Using Redis for storage');
-    const client = createClient({
-        url: process.env.REDIS_URL
-    });
+// Initialize database connection (must be called before using stores)
+async function initialize() {
+    if (isInitialized) {
+        return; // Already initialized
+    }
 
-    client.on('error', (err) => console.error('Redis Client Error', err));
+    if (process.env.REDIS_URL) {
+        console.log('⚡️ Using Redis for storage');
+        redisClient = createClient({
+            url: process.env.REDIS_URL
+        });
 
-    // We need to await connection, but module exports are sync.
-    // Common pattern is to connect immediately or lazily.
-    // For simplicity here, we connect immediately and hope it's ready or handle it in main.
-    client.connect().catch(console.error);
+        redisClient.on('error', (err) => console.error('Redis Client Error', err));
 
-    stateStore = createStore(client, null, null);
-    sessionStore = createStore(client, null, null);
+        try {
+            // Wait for connection to be established
+            await redisClient.connect();
+            console.log('✅ Redis connected successfully');
 
-} else {
-    console.log('📂 Using SQLite for storage');
-    const db = new Database(path.join(__dirname, 'db.sqlite'));
+            stateStore = createStore(redisClient, null, null);
+            sessionStore = createStore(redisClient, null, null);
+        } catch (err) {
+            console.error('❌ Failed to connect to Redis:', err.message);
+            throw new Error(`Redis connection failed: ${err.message}`);
+        }
 
-    // Initialize tables (Unified schema name pattern)
-    db.exec(`
-    CREATE TABLE IF NOT EXISTS auth_state (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-    
-    CREATE TABLE IF NOT EXISTS auth_session (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `);
+    } else {
+        console.log('📂 Using SQLite for storage');
+        const db = new Database(path.join(__dirname, 'db.sqlite'));
 
-    stateStore = createStore(null, db, 'auth_state');
-    sessionStore = createStore(null, db, 'auth_session');
+        // Initialize tables (Unified schema name pattern)
+        db.exec(`
+        CREATE TABLE IF NOT EXISTS auth_state (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_session (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+      `);
+
+        stateStore = createStore(null, db, 'auth_state');
+        sessionStore = createStore(null, db, 'auth_session');
+        console.log('✅ SQLite initialized successfully');
+    }
+
+    isInitialized = true;
 }
 
 module.exports = {
-    stateStore,
-    sessionStore
+    initialize,
+    get stateStore() {
+        if (!isInitialized) {
+            throw new Error('Database not initialized. Call initialize() first.');
+        }
+        return stateStore;
+    },
+    get sessionStore() {
+        if (!isInitialized) {
+            throw new Error('Database not initialized. Call initialize() first.');
+        }
+        return sessionStore;
+    }
 };

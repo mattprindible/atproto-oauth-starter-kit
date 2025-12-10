@@ -11,6 +11,38 @@ const cookieParser = require('cookie-parser');
 const fs = require('fs');
 const db = require('./db');
 
+// Validate required environment variables
+function validateEnvironment() {
+    const required = ['COOKIE_SECRET', 'PUBLIC_URL'];
+    const missing = required.filter(key => !process.env[key]);
+
+    if (missing.length > 0) {
+        console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+        console.error('Please check your .env file and ensure all required variables are set.');
+        process.exit(1);
+    }
+
+    // Validate COOKIE_SECRET strength
+    if (process.env.COOKIE_SECRET.length < 32) {
+        console.error('❌ COOKIE_SECRET must be at least 32 characters long for security.');
+        console.error('Generate a strong secret with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+        process.exit(1);
+    }
+
+    // Validate PUBLIC_URL format
+    if (!process.env.PUBLIC_URL.startsWith('http://') && !process.env.PUBLIC_URL.startsWith('https://')) {
+        console.error('❌ PUBLIC_URL must start with http:// or https://');
+        process.exit(1);
+    }
+
+    // Warn if using HTTP in production (not localhost)
+    if (process.env.PUBLIC_URL.startsWith('http://') && !process.env.PUBLIC_URL.includes('localhost') && !process.env.PUBLIC_URL.includes('127.0.0.1')) {
+        console.warn('⚠️  WARNING: PUBLIC_URL is using HTTP instead of HTTPS. This is insecure for production!');
+    }
+}
+
+validateEnvironment();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || `http://127.0.0.1:${PORT}`;
@@ -61,6 +93,9 @@ const {
 
 // Initialize App
 async function main() {
+    // Initialize database connection (Redis or SQLite)
+    await db.initialize();
+
     const privateKey = await JoseKey.fromJWK(keys.privateJwk);
 
     // Client Metadata
@@ -93,10 +128,14 @@ async function main() {
         sessionStore: db.sessionStore,
     });
 
+    // Trust proxy - required when behind reverse proxy (ngrok, load balancer, etc.)
+    // This allows Express to read the real client IP from X-Forwarded-For header
+    app.set('trust proxy', 1);
+
     app.use(helmet({
         contentSecurityPolicy: false, // Disabled for simplicity with inline scripts
     }));
-    app.use(express.json());
+    app.use(express.json({ limit: '1mb' })); // Prevent DoS via large JSON payloads
     app.use(express.static('public'));
     app.use(cookieParser(process.env.COOKIE_SECRET));
 
@@ -140,8 +179,8 @@ async function main() {
                 scope: 'atproto transition:generic',
             });
 
-            // Redirect user to PDS
-            res.redirect(url);
+            // Redirect user to PDS (convert to string for Express 5 compatibility)
+            res.redirect(url.toString());
         } catch (err) {
             console.error('Login error:', err);
             res.status(500).send(`Failed to start login: ${err.message}`);

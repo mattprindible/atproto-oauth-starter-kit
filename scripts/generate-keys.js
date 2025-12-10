@@ -14,8 +14,9 @@ async function main() {
     publicJwk.kid = kid;
 
     // Specific properties for ATProtocol checks
-    privateJwk.use = 'sig';
-    publicJwk.use = 'sig';
+    // Use key_ops instead of 'use' (deprecated in newer JWK specs)
+    privateJwk.key_ops = ['sign'];
+    publicJwk.key_ops = ['verify'];
     privateJwk.alg = 'ES256';
     publicJwk.alg = 'ES256';
 
