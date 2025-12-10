@@ -23,10 +23,11 @@ const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
 
 // CSRF Setup
 const {
-    generateToken, // Use this in your routes to provide a CSRF hash cookie and token.
-    doubleCsrfProtection, // This is the default CSRF protection middleware.
+    generateCsrfToken,
+    doubleCsrfProtection,
 } = doubleCsrf({
     getSecret: () => process.env.COOKIE_SECRET, // A function that optionally takes the request and returns a secret
+    getSessionIdentifier: (req) => req.signedCookies?.user_did || "anon", // Required by csrf-csrf
     cookieName: "x-csrf-token", // The name of the cookie to be used, recommend using x-csrf-token
     cookieOptions: {
         httpOnly: true,
@@ -79,7 +80,7 @@ async function main() {
 
     // CSRF Token Endpoint
     app.get('/api/csrf', (req, res) => {
-        const token = generateToken(req, res);
+        const token = generateCsrfToken(req, res);
         res.json({ token });
     });
 
