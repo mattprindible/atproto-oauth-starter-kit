@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { JoseKey } = require('@atproto/jwk-jose');
+const { doubleCsrf } = require('csrf-csrf');
 const express = require('express');
 const path = require('path');
 const { NodeOAuthClient } = require('@atproto/oauth-client-node');
@@ -19,6 +20,24 @@ if (!fs.existsSync(keysPath)) {
     process.exit(1);
 }
 const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
+
+// CSRF Setup
+const {
+    generateToken, // Use this in your routes to provide a CSRF hash cookie and token.
+    doubleCsrfProtection, // This is the default CSRF protection middleware.
+} = doubleCsrf({
+    getSecret: () => process.env.COOKIE_SECRET, // A function that optionally takes the request and returns a secret
+    cookieName: "x-csrf-token", // The name of the cookie to be used, recommend using x-csrf-token
+    cookieOptions: {
+        httpOnly: true,
+        sameSite: "lax",  // Recommend you make this strict if possible
+        path: "/",
+        secure: true,
+    },
+    size: 64, // The size of the generated tokens in bits
+    ignoredMethods: ["GET", "HEAD", "OPTIONS"], // A list of request methods that will not be protected.
+    getTokenFromRequest: (req) => req.headers["x-csrf-token"], // A function that returns the token from the request
+});
 
 // Initialize App
 async function main() {
@@ -57,6 +76,18 @@ async function main() {
     app.use(express.json());
     app.use(express.static('public'));
     app.use(cookieParser(process.env.COOKIE_SECRET));
+
+    // CSRF Token Endpoint
+    app.get('/api/csrf', (req, res) => {
+        const token = generateToken(req, res);
+        res.json({ token });
+    });
+
+    // Apply CSRF protection to all unsafe routes
+    // We explicitly exempt /client-metadata.json and /oauth/callback or just apply globally 
+    // since they are GET requests, they are ignored by default.
+    // The only unsafe route is /api/post and /logout
+    app.use(doubleCsrfProtection);
 
     // --- Routes ---
 

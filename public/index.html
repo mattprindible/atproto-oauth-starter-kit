@@ -1,23 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>ATProtocol OAuth Prototype</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-    h1 { margin-bottom: 2rem; }
-    .hidden { display: none; }
-    .card { border: 1px solid #ccc; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; }
-    input, button { font-size: 1rem; padding: 0.5rem; }
-    input { width: 100%; box-sizing: border-box; margin-bottom: 1rem; }
-    button { background: #0070f3; color: white; border: none; cursor: pointer; border-radius: 4px; }
-    button:hover { opacity: 0.9; }
-    button#logoutBtn { background: #ccc; color: black; }
-    .profile { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-    .profile img { width: 48px; height: 48px; border-radius: 50%; background: #eee; }
-    .error { color: red; margin-top: 1rem; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+    }
+
+    h1 {
+      margin-bottom: 2rem;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .card {
+      border: 1px solid #ccc;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+
+    input,
+    button {
+      font-size: 1rem;
+      padding: 0.5rem;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background: #0070f3;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button#logoutBtn {
+      background: #ccc;
+      color: black;
+    }
+
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .profile img {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #eee;
+    }
+
+    .error {
+      color: red;
+      margin-top: 1rem;
+    }
   </style>
 </head>
+
 <body>
   <h1>ATProtocol OAuth Prototype</h1>
 
@@ -49,7 +109,8 @@
 
     <div class="card">
       <h3>Make a Post</h3>
-      <textarea id="postText" rows="3" style="width: 100%; margin-bottom: 1rem; padding: 0.5rem;" placeholder="What's up?"></textarea>
+      <textarea id="postText" rows="3" style="width: 100%; margin-bottom: 1rem; padding: 0.5rem;"
+        placeholder="What's up?"></textarea>
       <button id="postBtn">Post</button>
       <div id="postStatus"></div>
     </div>
@@ -60,13 +121,18 @@
     const loginSection = document.getElementById('loginSection');
     const appSection = document.getElementById('appSection');
     const loginForm = document.getElementById('loginForm');
-    
+
     // Check session
     async function checkSession() {
       try {
+        // Fetch CSRF token first
+        const csrfRes = await fetch('/api/csrf');
+        const csrfData = await csrfRes.json();
+        window.csrfToken = csrfData.token;
+
         const res = await fetch('/api/me');
         const data = await res.json();
-        
+
         loading.classList.add('hidden');
         if (data.loggedIn) {
           showApp(data);
@@ -79,42 +145,30 @@
       }
     }
 
-    function showApp(user) {
-      document.getElementById('displayName').textContent = user.displayName || user.handle;
-      document.getElementById('userHandle').textContent = user.handle;
-      if (user.avatar) document.getElementById('avatar').src = user.avatar;
-      
-      loginSection.classList.add('hidden');
-      appSection.classList.remove('hidden');
-    }
-
-    // Login Flow
-    loginForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const handle = document.getElementById('handle').value.trim();
-      // Redirect to backend login
-      window.location.href = `/login?handle=${encodeURIComponent(handle)}`;
-    });
+    // ...
 
     // Post Flow
     document.getElementById('postBtn').addEventListener('click', async () => {
       const text = document.getElementById('postText').value;
       const btn = document.getElementById('postBtn');
       const status = document.getElementById('postStatus');
-      
+
       if (!text) return;
-      
+
       btn.disabled = true;
       status.textContent = 'Posting...';
-      
+
       try {
         const res = await fetch('/api/post', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': window.csrfToken // Include token!
+          },
           body: JSON.stringify({ text })
         });
         const data = await res.json();
-        
+
         if (data.success) {
           status.textContent = 'Posted!';
           document.getElementById('postText').value = '';
@@ -131,11 +185,17 @@
 
     // Logout Flow
     document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/logout', { method: 'POST' });
+      await fetch('/logout', {
+        method: 'POST',
+        headers: {
+          'x-csrf-token': window.csrfToken
+        }
+      });
       window.location.reload();
     });
 
     checkSession();
   </script>
 </body>
+
 </html>
