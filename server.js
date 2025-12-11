@@ -5,8 +5,9 @@ const cookieParser = require('cookie-parser');
 const { Agent } = require('@atproto/api');
 const db = require('./db');
 const { validateEnvironment } = require('./config/environment');
-const { loginLimiter, postLimiter, loadKeys, setupCsrf } = require('./config/security');
+const { postLimiter, loadKeys, setupCsrf } = require('./config/security');
 const { createOAuthClient } = require('./config/oauth-client');
+const authRoutes = require('./features/auth/auth.routes');
 
 // Validate environment variables on startup
 validateEnvironment();
@@ -32,6 +33,10 @@ async function main() {
         db.sessionStore
     );
 
+    // Make oauthClient available to routes
+    app.locals.oauthClient = oauthClient;
+    app.locals.clientMetadata = clientMetadata;
+
     // Trust proxy - required when behind reverse proxy (ngrok, load balancer, etc.)
     // This allows Express to read the real client IP from X-Forwarded-For header
     app.set('trust proxy', 1);
@@ -50,73 +55,22 @@ async function main() {
     });
 
     // Apply CSRF protection to all unsafe routes
-    // We explicitly exempt /client-metadata.json and /oauth/callback or just apply globally 
+    // We explicitly exempt /client-metadata.json and /oauth/callback or just apply globally
     // since they are GET requests, they are ignored by default.
     // The only unsafe route is /api/post and /logout
     app.use(doubleCsrfProtection);
 
     // --- Routes ---
 
-    // 1. Metadata Endpoint (Critical)
+    // Metadata Endpoint (Critical for OAuth)
     app.get('/client-metadata.json', (req, res) => {
         res.json(clientMetadata);
     });
 
-    // 2. Login - Init
-    app.get('/login', loginLimiter, async (req, res) => {
-        const handle = req.query.handle;
+    // Auth Routes (login, callback, logout)
+    app.use('/', authRoutes);
 
-        // Input Validation
-        if (!handle || typeof handle !== 'string' || handle.trim().length === 0) {
-            return res.status(400).send('Handle required');
-        }
-        // Basic handle format check (alphanumeric + dots/hyphens)
-        if (!/^[a-zA-Z0-9.-]+$/.test(handle)) {
-            return res.status(400).send('Invalid handle format');
-        }
-
-        try {
-            // Revoke any existing session? Maybe not needed for minimal.
-
-            // Initiate interaction
-            const url = await oauthClient.authorize(handle, {
-                scope: 'atproto transition:generic',
-            });
-
-            // Redirect user to PDS (convert to string for Express 5 compatibility)
-            res.redirect(url.toString());
-        } catch (err) {
-            console.error('Login error:', err);
-            res.status(500).send(`Failed to start login: ${err.message}`);
-        }
-    });
-
-    // 3. Callback
-    app.get('/oauth/callback', async (req, res) => {
-        try {
-            const params = new URLSearchParams(req.query);
-            const { session } = await oauthClient.callback(params);
-
-            // Session is established!
-            // session.did is the user's DID.
-
-            // Store DID in a signed httpOnly cookie to track the browser user
-            res.cookie('user_did', session.did, {
-                httpOnly: true,
-                signed: true,
-                maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
-                sameSite: 'lax', // Must be lax for top-level navigation (redirect from PDS)
-                secure: true
-            });
-
-            res.redirect('/');
-        } catch (err) {
-            console.error('Callback error:', err);
-            res.status(500).send(`Login failed: ${err.message}`);
-        }
-    });
-
-    // 4. API - Get Current User
+    // API - Get Current User
     app.get('/api/me', async (req, res) => {
         const did = req.signedCookies.user_did;
         if (!did) return res.json({ loggedIn: false });
@@ -168,20 +122,6 @@ async function main() {
             console.error('Post error:', err);
             res.status(500).json({ error: 'Failed to post' });
         }
-    });
-
-    // 6. Logout
-    app.post('/logout', async (req, res) => {
-        const did = req.signedCookies.user_did;
-        if (did) {
-            try {
-                await oauthClient.revoke(did);
-            } catch (err) {
-                console.error('Failed to revoke token:', err);
-            }
-        }
-        res.clearCookie('user_did');
-        res.json({ success: true });
     });
 
     // Error Handler
