@@ -12,6 +12,11 @@ describe('Database Operations', () => {
     await db.initialize();
   });
 
+  afterAll(async () => {
+    // Close database connection after all tests
+    await db.close();
+  });
+
   afterEach(async () => {
     // Clean up test data after each test
     // Note: We can't easily reset the DB, so we'll delete known keys

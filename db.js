@@ -42,6 +42,7 @@ const createStore = (redisClient, sqliteDb, tableName) => {
 let stateStore;
 let sessionStore;
 let redisClient;
+let sqliteDb;
 let isInitialized = false;
 
 // Initialize database connection (must be called before using stores)
@@ -72,10 +73,10 @@ async function initialize() {
 
     } else {
         console.log('📂 Using SQLite for storage');
-        const db = new Database(path.join(__dirname, 'db.sqlite'));
+        sqliteDb = new Database(path.join(__dirname, 'db.sqlite'));
 
         // Initialize tables (Unified schema name pattern)
-        db.exec(`
+        sqliteDb.exec(`
         CREATE TABLE IF NOT EXISTS auth_state (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -87,16 +88,48 @@ async function initialize() {
         );
       `);
 
-        stateStore = createStore(null, db, 'auth_state');
-        sessionStore = createStore(null, db, 'auth_session');
+        stateStore = createStore(null, sqliteDb, 'auth_state');
+        sessionStore = createStore(null, sqliteDb, 'auth_session');
         console.log('✅ SQLite initialized successfully');
     }
 
     isInitialized = true;
 }
 
+// Close database connection
+async function close() {
+    if (!isInitialized) {
+        return;
+    }
+
+    if (redisClient) {
+        try {
+            await redisClient.quit();
+            console.log('✅ Redis connection closed');
+        } catch (err) {
+            console.error('Error closing Redis:', err);
+        }
+    }
+
+    if (sqliteDb) {
+        try {
+            sqliteDb.close();
+            console.log('✅ SQLite connection closed');
+        } catch (err) {
+            console.error('Error closing SQLite:', err);
+        }
+    }
+
+    isInitialized = false;
+    stateStore = null;
+    sessionStore = null;
+    redisClient = null;
+    sqliteDb = null;
+}
+
 module.exports = {
     initialize,
+    close,
     get stateStore() {
         if (!isInitialized) {
             throw new Error('Database not initialized. Call initialize() first.');

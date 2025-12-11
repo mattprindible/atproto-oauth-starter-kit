@@ -17,5 +17,7 @@ module.exports = {
   testMatch: ['**/tests/**/*.test.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 10000,
-  verbose: true
+  verbose: true,
+  // Force Jest to exit after tests complete, even if there are async operations
+  forceExit: true
 };
