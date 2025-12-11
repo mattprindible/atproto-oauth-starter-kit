@@ -76,6 +76,71 @@ Visit your `PUBLIC_URL` in a browser. You can now log in with any Bluesky handle
 - **`db.js`**: Simple SQLite wrapper. Stores OAuth state (login attempts) and Sessions (tokens).
 - **`public/`**: Frontend assets.
 - **`scripts/generate-keys.js`**: Creates the JWK (JSON Web Key) pair.
+- **`tests/`**: Comprehensive test suite (unit & integration tests).
+
+## Testing
+
+This project includes a comprehensive test suite to ensure reliability and prevent regressions as you build on top of it.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (great for development)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests with verbose output
+npm run test:verbose
+```
+
+### Test Coverage
+
+The test suite includes **90 tests** covering:
+
+- **Unit Tests**:
+  - Environment variable validation
+  - Database operations (SQLite storage)
+
+- **Integration Tests**:
+  - Complete OAuth flow (login, callback, logout)
+  - API endpoints (`/api/me`, `/api/post`, `/api/csrf`)
+  - Security features (CSRF protection, rate limiting, cookie security)
+  - Input validation
+  - Error handling
+
+### Test Structure
+
+```
+tests/
+├── setup.js                    # Test environment configuration
+├── helpers/
+│   ├── mock-oauth.js           # Mock OAuth client for testing
+│   ├── mock-keys.js            # Pre-generated test keys
+│   └── test-server.js          # Test server setup utilities
+├── unit/
+│   ├── environment.test.js     # Environment validation tests
+│   └── db.test.js              # Database operation tests
+└── integration/
+    ├── oauth-flow.test.js      # OAuth flow tests
+    ├── api-endpoints.test.js   # API endpoint tests
+    └── security.test.js        # Security feature tests
+```
+
+### Why Tests Matter for AI Agents
+
+Tests are especially valuable when working with AI coding agents (like me!). They:
+
+- **Prevent regressions**: Agents can verify changes don't break existing functionality
+- **Enable confident refactoring**: Tests provide a safety net for code improvements
+- **Self-verification**: Agents can run tests to validate their own work
+- **Documentation**: Tests show how the code is meant to be used
+
+When an agent makes changes, it can simply run `npm test` to verify everything still works correctly.
 
 ## Moving to Production
 
