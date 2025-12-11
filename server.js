@@ -65,12 +65,25 @@ const postLimiter = rateLimit({
 });
 
 // Load Keys
-const keysPath = path.join(__dirname, 'keys.json');
-if (!fs.existsSync(keysPath)) {
-    console.error('keys.json not found! Run "npm run generate-keys" first.');
-    process.exit(1);
+// Load Keys
+let keys;
+if (process.env.KEYS_JSON) {
+    try {
+        keys = JSON.parse(process.env.KEYS_JSON);
+        console.log('🔑 Loaded keys from KEYS_JSON environment variable');
+    } catch (err) {
+        console.error('❌ Failed to parse KEYS_JSON. Ensure it is valid JSON.');
+        process.exit(1);
+    }
+} else {
+    const keysPath = path.join(__dirname, 'keys.json');
+    if (!fs.existsSync(keysPath)) {
+        console.error('❌ No keys found! Set KEYS_JSON env var or run "npm run generate-keys".');
+        process.exit(1);
+    }
+    keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
+    console.log('🔑 Loaded keys from local keys.json file');
 }
-const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
 
 // CSRF Setup
 const {
