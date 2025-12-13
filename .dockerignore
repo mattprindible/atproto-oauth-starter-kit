@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+npm-debug.log
+# package-lock.json - KEEP THIS for npm ci to work in Docker
+
+# Environment files (should be injected at runtime)
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Database files (should be mounted as volumes or use external service)
+*.sqlite
+*.db
+
+# Test files and coverage
+tests/
+coverage/
+*.test.js
+jest.config.js
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation (optional - include if you want docs in image)
+# README.md
+# docs/
+
+# CI/CD
+.github/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keys (should be injected via KEYS_JSON environment variable in production)
+# Uncomment this if you want to force key injection rather than copying keys.json
+# keys.json

@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Redis service for session/state storage
+  redis:
+    image: redis:7-alpine
+    container_name: atproto-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ATProto OAuth app
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: atproto-app
+    ports:
+      - "3000:3000"
+    environment:
+      # Override these in .env file or pass via command line
+      PORT: 3000
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      COOKIE_SECRET: ${COOKIE_SECRET:-change-this-to-a-random-32-char-string-in-production}
+      REDIS_URL: redis://redis:6379
+      # Optional: Inject keys as JSON string instead of using keys.json file
+      # KEYS_JSON: ${KEYS_JSON}
+    volumes:
+      # Mount keys.json for development (in production, use KEYS_JSON env var)
+      - ./keys.json:/app/keys.json:ro
+      # Optional: Mount SQLite database if using SQLite instead of Redis
+      # - ./db.sqlite:/app/db.sqlite
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 3s
+      start_period: 40s
+      retries: 3
+
+volumes:
+  redis_data:
+    driver: local

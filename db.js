@@ -127,9 +127,34 @@ async function close() {
     sqliteDb = null;
 }
 
+// Health check for monitoring
+async function healthCheck() {
+    if (!isInitialized) {
+        return false;
+    }
+
+    try {
+        if (redisClient) {
+            // Check Redis connectivity with ping
+            await redisClient.ping();
+            return true;
+        } else if (sqliteDb) {
+            // Check SQLite by running a simple query
+            const stmt = sqliteDb.prepare('SELECT 1');
+            stmt.get();
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Health check failed:', error);
+        return false;
+    }
+}
+
 module.exports = {
     initialize,
     close,
+    healthCheck,
     get stateStore() {
         if (!isInitialized) {
             throw new Error('Database not initialized. Call initialize() first.');
