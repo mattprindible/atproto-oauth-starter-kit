@@ -1,6 +1,7 @@
 node_modules
 .env
 keys.json
+keys-single-line.json
 db.sqlite
 *.db
 .DS_Store

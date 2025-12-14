@@ -1,16 +1,19 @@
 # ATProtocol OAuth Starter Kit
 
-A minimal, robust "Confidential Client" implementation for ATProtocol (Bluesky) OAuth authentication in Node.js.
+A production-ready "Confidential Client" implementation for ATProtocol (Bluesky) OAuth authentication in Node.js.
 
 This project serves as a blueprint for building Bluesky apps that:
 - ✅ Authenticate with real Bluesky accounts (bsky.social) or self-hosted PDS.
 - ✅ Use **Confidential Client** auth (Private Key JWT) for better security and 90-day sessions.
 - ✅ Handle the full OAuth lifecycle: Login, Callback, Token Refresh, and Revocation.
-- ✅ Store sessions persistently (SQLite included, easily swappable for Postgres/Redis).
+- ✅ Store sessions persistently (SQLite for development, Redis for production).
+- ✅ Modular feature-based architecture for easy extension.
+- ✅ Docker support for containerized deployment.
+- ✅ Production deployment configurations (Railway, etc.).
 
 ## Why this exists?
 
-Most ATProto examples use "App Passwords", which are limited. The official OAuth flow lets users log in securely without sharing their main password, but it requires hosting a public "Client Metadata" file and handling cryptographic keys. This starter kit wires all that up for you.
+Most ATProto examples use "App Passwords", which are limited. The official OAuth flow lets users log in securely without sharing their main password, but it requires hosting a public "Client Metadata" file and handling cryptographic keys. This starter kit wires all that up for you with a clean, maintainable architecture.
 
 ## Getting Started
 
@@ -19,8 +22,8 @@ Most ATProto examples use "App Passwords", which are limited. The official OAuth
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/your-username/atproto-oauth-starter.git
-cd atproto-oauth-starter
+git clone https://github.com/your-username/atproto-oauth-starter-kit.git
+cd atproto-oauth-starter-kit
 npm install
 ```
 
@@ -72,11 +75,40 @@ Visit your `PUBLIC_URL` in a browser. You can now log in with any Bluesky handle
 
 ## Project Structure
 
-- **`server.js`**: Main Express app. Handles the OAuth endpoints (`/client-metadata.json`, `/login`, `/oauth/callback`).
-- **`db.js`**: Simple SQLite wrapper. Stores OAuth state (login attempts) and Sessions (tokens).
-- **`public/`**: Frontend assets.
-- **`scripts/generate-keys.js`**: Creates the JWK (JSON Web Key) pair.
-- **`tests/`**: Comprehensive test suite (unit & integration tests).
+The project uses a modular, feature-based architecture for maintainability:
+
+```
+├── config/                     # Configuration modules
+│   ├── environment.js          # Environment variable management
+│   ├── oauth-client.js         # OAuth client configuration
+│   └── security.js             # Security middleware setup
+├── features/                   # Feature modules
+│   ├── auth/                   # Authentication feature
+│   │   ├── auth.routes.js      # Auth endpoints (login, callback, logout)
+│   │   └── auth.service.js     # Auth business logic
+│   ├── metadata/               # Client metadata feature
+│   │   └── metadata.routes.js  # Client metadata endpoint
+│   ├── posts/                  # Posts feature
+│   │   ├── posts.routes.js     # Post creation endpoints
+│   │   └── posts.service.js    # Post business logic
+│   └── profile/                # User profile feature
+│       ├── profile.routes.js   # Profile endpoints
+│       └── profile.service.js  # Profile business logic
+├── utils/                      # Utility modules
+│   └── agent.js                # AT Protocol agent utilities
+├── public/                     # Frontend assets
+│   └── index.html              # Single-page application
+├── scripts/                    # Utility scripts
+│   ├── generate-keys.js        # JWK key pair generator
+│   └── check-redis.js          # Redis connection checker
+├── tests/                      # Comprehensive test suite
+│   ├── unit/                   # Unit tests
+│   └── integration/            # Integration tests
+├── server.js                   # Main Express application
+├── db.js                       # Database abstraction layer (SQLite/Redis)
+├── Dockerfile                  # Docker container configuration
+└── docker-compose.yml          # Docker Compose setup
+```
 
 ## Testing
 
@@ -142,11 +174,47 @@ Tests are especially valuable when working with AI coding agents (like me!). The
 
 When an agent makes changes, it can simply run `npm test` to verify everything still works correctly.
 
-## Moving to Production
+## Deployment
 
-1.  **Database**: Swap `db.js` for a real database (PostgreSQL, Redis). The OAuth client just needs an interface with `set()`, `get()`, and `del()`.
-2.  **Deployment**: Deploy this code to a server with a static domain (e.g., `myapp.com`). Update `PUBLIC_URL` in `.env`.
-3.  **Keys**: Commit your code, but **DO NOT commit `keys.json`**. Generate new keys on your production server or inject them via environment variables.
+### Local Development with Docker
+
+Use Docker Compose for a production-like environment locally:
+
+```bash
+docker-compose up
+```
+
+This will start both the application and Redis cache.
+
+### Production Deployment
+
+#### Option 1: Railway (Recommended)
+
+1. Connect your GitHub repository to Railway
+2. Railway will automatically detect the Dockerfile and build your app
+3. Set the required environment variables in Railway:
+   - `PUBLIC_URL`: Your Railway app URL (e.g., `https://your-app.up.railway.app`)
+   - `COOKIE_SECRET`: A secure random string
+   - `KEYS_JSON`: Your `keys.json` content (single-line format)
+   - `REDIS_URL`: (Optional) Railway Redis connection string
+
+Railway will automatically redeploy when you push to your GitHub repository.
+
+#### Option 2: Any Docker-Compatible Platform
+
+The included Dockerfile works with any container platform (Render, Fly.io, AWS, GCP, etc.):
+
+1. Build: `docker build -t atproto-oauth-app .`
+2. Deploy the container to your platform
+3. Set environment variables as needed
+4. Ensure your `PUBLIC_URL` matches your production domain
+
+### Production Checklist
+
+- [ ] **Database**: The app uses SQLite by default. For production, configure Redis via `REDIS_URL` environment variable.
+- [ ] **Keys**: Never commit `keys.json`. Use the `KEYS_JSON` environment variable or mount it as a secret.
+- [ ] **Domain**: Update `PUBLIC_URL` to your production domain.
+- [ ] **Security**: Use a strong `COOKIE_SECRET` and enable HTTPS.
 
 ## License
 
