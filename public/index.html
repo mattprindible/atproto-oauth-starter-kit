@@ -3,215 +3,62 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>ATProtocol OAuth Prototype</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      max-width: 600px;
-      margin: 2rem auto;
-      padding: 0 1rem;
-      line-height: 1.5;
-    }
-
-    h1 {
-      margin-bottom: 2rem;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .card {
-      border: 1px solid #ccc;
-      padding: 1.5rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-    }
-
-    input,
-    button {
-      font-size: 1rem;
-      padding: 0.5rem;
-    }
-
-    input {
-      width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 1rem;
-    }
-
-    button {
-      background: #0070f3;
-      color: white;
-      border: none;
-      cursor: pointer;
-      border-radius: 4px;
-    }
-
-    button:hover {
-      opacity: 0.9;
-    }
-
-    button#logoutBtn {
-      background: #ccc;
-      color: black;
-    }
-
-    .profile {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .profile img {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: #eee;
-    }
-
-    .error {
-      color: red;
-      margin-top: 1rem;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATProtocol OAuth Starter Kit</title>
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 
 <body>
-  <h1>ATProtocol OAuth Prototype</h1>
+  <h1>ATProtocol OAuth Starter Kit</h1>
 
   <!-- Loading State -->
   <div id="loading">Loading...</div>
 
   <!-- Login Form -->
-  <div id="loginSection" class="hidden card">
+  <section id="loginSection" class="hidden card">
     <h2>Login</h2>
     <p>Enter your handle (e.g., alice.bsky.social) to sign in.</p>
     <form id="loginForm">
-      <input type="text" id="handle" placeholder="handle.bsky.social" required>
+      <input type="text" id="handle" placeholder="handle.bsky.social" required autocomplete="username">
       <button type="submit">Sign in with Bluesky</button>
     </form>
-  </div>
+  </section>
 
   <!-- App Interface -->
-  <div id="appSection" class="hidden">
+  <section id="appSection" class="hidden">
+    <!-- Profile Card -->
     <div class="card">
       <div class="profile">
         <img id="avatar" src="" alt="">
         <div>
           <strong id="displayName"></strong>
-          <div id="userHandle" style="color: #666"></div>
+          <div id="userHandle" class="handle"></div>
         </div>
       </div>
-      <button id="logoutBtn">Logout</button>
+      <button id="logoutBtn" class="secondary">Logout</button>
     </div>
 
+    <!-- Compose Post Card -->
     <div class="card">
       <h3>Make a Post</h3>
-      <textarea id="postText" rows="3" style="width: 100%; margin-bottom: 1rem; padding: 0.5rem;"
-        placeholder="What's up?"></textarea>
+      <textarea id="postText" rows="3" placeholder="What's up?" maxlength="300"></textarea>
       <button id="postBtn">Post</button>
       <div id="postStatus"></div>
     </div>
-  </div>
 
-  <script>
-    const loading = document.getElementById('loading');
-    const loginSection = document.getElementById('loginSection');
-    const appSection = document.getElementById('appSection');
-    const loginForm = document.getElementById('loginForm');
+    <!-- Feed Section -->
+    <div id="feedSection" class="card">
+      <h3>
+        Your Feed
+        <button id="refreshFeedBtn" class="secondary">Refresh</button>
+      </h3>
+      <div id="feedLoading">Loading feed...</div>
+      <div id="feedContainer"></div>
+      <button id="loadMoreBtn" class="hidden">Load More</button>
+    </div>
+  </section>
 
-    // Check session
-    async function checkSession() {
-      try {
-        // Fetch CSRF token first
-        const csrfRes = await fetch('/api/csrf');
-        const csrfData = await csrfRes.json();
-        window.csrfToken = csrfData.token;
-
-        const res = await fetch('/api/me');
-        const data = await res.json();
-
-        loading.classList.add('hidden');
-        if (data.loggedIn) {
-          showApp(data);
-        } else {
-          loginSection.classList.remove('hidden');
-        }
-      } catch (e) {
-        console.error(e);
-        loading.textContent = 'Error loading session.';
-      }
-    }
-
-    function showApp(user) {
-      document.getElementById('displayName').textContent = user.displayName || user.handle;
-      document.getElementById('userHandle').textContent = user.handle;
-      if (user.avatar) document.getElementById('avatar').src = user.avatar;
-
-      loginSection.classList.add('hidden');
-      appSection.classList.remove('hidden');
-    }
-
-    // Login Flow
-    loginForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const handle = document.getElementById('handle').value.trim();
-      // Redirect to backend login (GET request, no CSRF needed for initiation usually, or strict flows might need it)
-      // Since it's a GET to /login which redirects to OAuth provider, CSRF token isn't strictly needed in headers
-      window.location.href = `/login?handle=${encodeURIComponent(handle)}`;
-    });
-
-    // Post Flow
-    document.getElementById('postBtn').addEventListener('click', async () => {
-      const text = document.getElementById('postText').value;
-      const btn = document.getElementById('postBtn');
-      const status = document.getElementById('postStatus');
-
-      if (!text) return;
-
-      btn.disabled = true;
-      status.textContent = 'Posting...';
-
-      try {
-        const res = await fetch('/api/post', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': window.csrfToken // Include token!
-          },
-          body: JSON.stringify({ text })
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          status.textContent = 'Posted!';
-          document.getElementById('postText').value = '';
-          setTimeout(() => status.textContent = '', 3000);
-        } else {
-          status.textContent = 'Error: ' + (data.error || 'Unknown error');
-        }
-      } catch (e) {
-        status.textContent = 'Network error';
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    // Logout Flow
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/logout', {
-        method: 'POST',
-        headers: {
-          'x-csrf-token': window.csrfToken
-        }
-      });
-      window.location.reload();
-    });
-
-    checkSession();
-  </script>
+  <script src="/js/app.js"></script>
 </body>
 
 </html>

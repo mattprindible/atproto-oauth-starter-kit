@@ -9,6 +9,7 @@ const { createOAuthClient } = require('./config/oauth-client');
 const authRoutes = require('./features/auth/auth.routes');
 const profileRoutes = require('./features/profile/profile.routes');
 const postsRoutes = require('./features/posts/posts.routes');
+const feedRoutes = require('./features/feed/feed.routes');
 const metadataRoutes = require('./features/metadata/metadata.routes');
 
 // Validate environment variables on startup
@@ -70,6 +71,9 @@ async function main() {
 
     // Posts Routes (/api/post)
     app.use('/api', postsRoutes);
+
+    // Feed Routes (/api/feed)
+    app.use('/api', feedRoutes);
 
     // Error Handler
     app.use((err, req, res, next) => {
