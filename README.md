@@ -1,5 +1,7 @@
 # ATProtocol OAuth Starter Kit
 
+[![Status](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fatproto-oauth-starter-kit-production.up.railway.app%2Fapi%2Fhealth&query=%24.status&label=status)](https://atproto-oauth-starter-kit-production.up.railway.app)
+
 A production-ready "Confidential Client" implementation for ATProtocol (Bluesky) OAuth authentication in Node.js.
 
 This project serves as a blueprint for building Bluesky apps that:
