@@ -39,8 +39,74 @@ const createStore = (redisClient, sqliteDb, tableName) => {
     }
 };
 
+// In-memory locks for SQLite mode (single instance only)
+const inMemoryLocks = new Map();
+
+// Create a request lock function for OAuth token refresh coordination
+const createRequestLock = (redisClient) => {
+    if (redisClient) {
+        // Redis-based distributed lock using SET NX PX
+        return async (key, fn) => {
+            const lockKey = `lock:${key}`;
+            const lockValue = `${Date.now()}-${Math.random()}`;
+            const lockTimeout = 30000; // 30 second lock timeout
+
+            // Try to acquire lock
+            const acquired = await redisClient.set(lockKey, lockValue, {
+                NX: true,  // Only set if not exists
+                PX: lockTimeout  // Expire after timeout
+            });
+
+            if (!acquired) {
+                // Wait and retry once
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const retryAcquired = await redisClient.set(lockKey, lockValue, {
+                    NX: true,
+                    PX: lockTimeout
+                });
+                if (!retryAcquired) {
+                    throw new Error(`Could not acquire lock for ${key}`);
+                }
+            }
+
+            try {
+                return await fn();
+            } finally {
+                // Release lock only if we still own it
+                const currentValue = await redisClient.get(lockKey);
+                if (currentValue === lockValue) {
+                    await redisClient.del(lockKey);
+                }
+            }
+        };
+    } else {
+        // In-memory lock for SQLite (single instance)
+        return async (key, fn) => {
+            // Wait for any existing lock to release
+            while (inMemoryLocks.has(key)) {
+                await inMemoryLocks.get(key);
+            }
+
+            // Create a new lock promise
+            let releaseLock;
+            const lockPromise = new Promise(resolve => {
+                releaseLock = resolve;
+            });
+            inMemoryLocks.set(key, lockPromise);
+
+            try {
+                return await fn();
+            } finally {
+                inMemoryLocks.delete(key);
+                releaseLock();
+            }
+        };
+    }
+};
+
 let stateStore;
 let sessionStore;
+let requestLock;
 let redisClient;
 let sqliteDb;
 let isInitialized = false;
@@ -66,6 +132,7 @@ async function initialize() {
 
             stateStore = createStore(redisClient, null, null);
             sessionStore = createStore(redisClient, null, null);
+            requestLock = createRequestLock(redisClient);
         } catch (err) {
             console.error('❌ Failed to connect to Redis:', err.message);
             throw new Error(`Redis connection failed: ${err.message}`);
@@ -90,6 +157,7 @@ async function initialize() {
 
         stateStore = createStore(null, sqliteDb, 'auth_state');
         sessionStore = createStore(null, sqliteDb, 'auth_session');
+        requestLock = createRequestLock(null);
         console.log('✅ SQLite initialized successfully');
     }
 
@@ -123,6 +191,7 @@ async function close() {
     isInitialized = false;
     stateStore = null;
     sessionStore = null;
+    requestLock = null;
     redisClient = null;
     sqliteDb = null;
 }
@@ -166,5 +235,11 @@ module.exports = {
             throw new Error('Database not initialized. Call initialize() first.');
         }
         return sessionStore;
+    },
+    get requestLock() {
+        if (!isInitialized) {
+            throw new Error('Database not initialized. Call initialize() first.');
+        }
+        return requestLock;
     }
 };

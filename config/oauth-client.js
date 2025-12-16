@@ -41,9 +41,10 @@ function createClientMetadata(publicUrl, keys) {
  * @param {string} publicUrl - The public URL of this application
  * @param {Object} stateStore - Store for OAuth state
  * @param {Object} sessionStore - Store for OAuth sessions
+ * @param {Function} requestLock - Lock function for token refresh coordination
  * @returns {Promise<{oauthClient: NodeOAuthClient, clientMetadata: Object}>}
  */
-async function createOAuthClient(keys, publicUrl, stateStore, sessionStore) {
+async function createOAuthClient(keys, publicUrl, stateStore, sessionStore, requestLock) {
     const privateKey = await JoseKey.fromJWK(keys.privateJwk);
     const clientMetadata = createClientMetadata(publicUrl, keys);
 
@@ -52,6 +53,7 @@ async function createOAuthClient(keys, publicUrl, stateStore, sessionStore) {
         keyset: [privateKey],
         stateStore,
         sessionStore,
+        requestLock,
     });
 
     return { oauthClient, clientMetadata };

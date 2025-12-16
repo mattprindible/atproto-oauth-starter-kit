@@ -33,7 +33,8 @@ async function main() {
         keys,
         PUBLIC_URL,
         db.stateStore,
-        db.sessionStore
+        db.sessionStore,
+        db.requestLock
     );
 
     // Make shared resources available to routes
