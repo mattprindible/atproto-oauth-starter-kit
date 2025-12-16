@@ -1,0 +1,66 @@
+name: Health Monitor
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: "0 */6 * * *"
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Check health endpoint
+        id: health
+        run: |
+          RESPONSE=$(curl -sf https://atproto-oauth-starter-kit-production.up.railway.app/api/health 2>&1) || RESPONSE="UNREACHABLE"
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+
+          if [ "$RESPONSE" = "UNREACHABLE" ]; then
+            echo "status=unreachable" >> $GITHUB_OUTPUT
+            echo "healthy=false" >> $GITHUB_OUTPUT
+          else
+            STATUS=$(echo "$RESPONSE" | jq -r '.status // "unknown"')
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            if [ "$STATUS" = "ok" ]; then
+              echo "healthy=true" >> $GITHUB_OUTPUT
+            else
+              echo "healthy=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Log health status
+        run: |
+          echo "Health check result: ${{ steps.health.outputs.status }}"
+          echo "Healthy: ${{ steps.health.outputs.healthy }}"
+
+      - name: Checkout repository
+        if: steps.health.outputs.healthy == 'false'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Create issue for unhealthy status
+        if: steps.health.outputs.healthy == 'false'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            The automated health check detected a problem with the production deployment.
+
+            Health endpoint: https://atproto-oauth-starter-kit-production.up.railway.app/api/health
+            Status returned: ${{ steps.health.outputs.status }}
+            Full response: ${{ steps.health.outputs.response }}
+
+            Please create a GitHub issue to track this incident with:
+            - A clear title indicating the service is down or degraded
+            - The timestamp of when this was detected
+            - The health check response details
+            - Suggested troubleshooting steps (check Railway logs, Redis connection, etc.)
+
+            Use the 'gh issue create' command to create the issue.
